@@ -10,7 +10,7 @@ const isAllowNewDevice = true
 const isAllowQueryNums = true
 // 根路径
 const rootPath = '/'
-// Basic Auth username:password
+// BasicAuth username:password
 const basicAuth = ''
 
 async function handleRequest(request, env, ctx) {
@@ -31,12 +31,12 @@ async function handleRequest(request, env, ctx) {
         case "/info": {
             if (!util.validateBasicAuth(request)) {
                 return new Response('Unauthorized', {
-                        status: 401,
-                        headers: {
-                            'content-type': 'text/plain',
-                            'WWW-Authenticate': 'Basic',
-                        }
-                    })
+                    status: 401,
+                    headers: {
+                        'content-type': 'text/plain',
+                        'WWW-Authenticate': 'Basic',
+                    }
+                })
             }
 
             return handler.info(searchParams)
@@ -89,6 +89,7 @@ async function handleRequest(request, env, ctx) {
                             })
                         }
                     }
+
                     if (requestBody.device_keys && typeof requestBody.device_keys === 'string') {
                         if (requestBody.device_keys.startsWith('[') || requestBody.device_keys.endsWith(']')) {
                             requestBody.device_keys = JSON.parse(requestBody.device_keys)
@@ -120,8 +121,8 @@ async function handleRequest(request, env, ctx) {
                         'data': await Promise.all(requestBody.device_keys.map(async (device_key) => {
                             if (!device_key) {
                                 return {
-                                    message: 'device key is empty',
                                     code: 400,
+                                    message: 'device key is empty',
                                     device_key: device_key,
                                 }
                             }
@@ -129,8 +130,8 @@ async function handleRequest(request, env, ctx) {
                             const response = await handler.push({...requestBody, device_key})
                             const responseBody = await response.json()
                             return {
-                                message: responseBody.message,
                                 code: response.status,
+                                message: responseBody.message,
                                 device_key: device_key,
                             }
                         })),
@@ -177,15 +178,12 @@ async function handleRequest(request, env, ctx) {
     }
 }
 
-/**
- * Class Handler
- */
 class Handler {
     constructor(env) {
         this.version = "v2.1.6"
-        this.build = "2025-04-24 21:49:52"
+        this.build = "2025-06-12 18:53:37"
         this.arch = "js"
-        this.commit = "5b71b65593b5d2e97f794af04de6396e3d88346f"
+        this.commit = "a7d670448c33cc42ebee558e4db3444e9d69aa7c"
 
         const db = new Database(env)
 
@@ -256,6 +254,7 @@ class Handler {
 
         this.healthz = async (parameters) => {
             return new Response("ok", {
+                status: 200,
                 headers: {
                     'content-type': 'text/plain',
                 }
@@ -348,10 +347,12 @@ class Handler {
             const level = parameters.level || undefined
             const volume = parameters.volume || undefined
             const url = parameters.url || undefined
+            const image = parameters.image || undefined
             const copy = parameters.copy || undefined
             const badge = parameters.badge || undefined
             const autoCopy = parameters.autoCopy || undefined
             const action = parameters.action || undefined
+            const iv = parameters.iv || undefined
 
             // https://developer.apple.com/documentation/usernotifications/generating-a-remote-notification
             const aps = {
@@ -399,6 +400,8 @@ class Handler {
                 'badge': badge,
                 'autocopy': autoCopy,
                 'action': action,
+                'iv': iv,
+                'image': image,
             }
 
             const apns = new APNs(db)
@@ -440,9 +443,6 @@ class Handler {
     }
 }
 
-/**
- * Class APNs
- */
 class APNs {
     constructor(db) {
         const generateAuthToken = async () => {
@@ -479,11 +479,14 @@ class APNs {
 
         const getAuthToken = async () => {
             let authToken = await db.authorizationToken()
+
             if (authToken) {
                 return await authToken
             }
+
             authToken = await generateAuthToken()
             await db.saveAuthorizationToken(authToken, util.getTimestamp())
+
             return authToken
         }
 
@@ -508,9 +511,6 @@ class APNs {
     }
 }
 
-/**
- * Class Database
- */
 class Database {
     constructor(env) {
         const db = env.database
@@ -521,6 +521,7 @@ class Database {
         this.countAll = async () => {
             const query = 'SELECT COUNT(*) as rowCount FROM `devices`'
             const result = await db.prepare(query).run()
+            
             return (result.results[0] || {"rowCount": -1}).rowCount
         }
 
@@ -528,6 +529,7 @@ class Database {
             const device_key = (key || '').replace(/[^a-zA-Z0-9]/g, '') || "_PLACE_HOLDER_"
             const query = 'SELECT `token` FROM `devices` WHERE `key` = ?'
             const result = await db.prepare(query).bind(device_key).run()
+
             return (result.results[0] || {}).token
         }
 
@@ -535,12 +537,14 @@ class Database {
             const device_token = (token || '').replace(/[^a-z0-9]/g, '') || "_PLACE_HOLDER_"
             const query = 'INSERT OR REPLACE INTO `devices` (`key`, `token`) VALUES (?, ?)'
             const result = await db.prepare(query).bind(key, device_token).run()
+
             return result
         }
 
         this.saveAuthorizationToken = async (token) => {
             const query = 'INSERT OR REPLACE INTO `authorization` (`id`, `token`, `time`) VALUES (1, ?, ?)'
             const result = await db.prepare(query).bind(token, util.getTimestamp()).run()
+
             return result
         }
 
@@ -551,6 +555,7 @@ class Database {
             if (result.results.length > 0) {
                 const tokenTime = parseInt(result.results[0].time)
                 const timeDifference = util.getTimestamp() - tokenTime
+
                 if (timeDifference <= 3000) {
                     return result.results[0].token
                 }
@@ -561,9 +566,6 @@ class Database {
     }
 }
 
-/**
- * Class Util
- */
 class Util {
     constructor() {
         this.getTimestamp = () => {
